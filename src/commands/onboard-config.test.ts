@@ -33,6 +33,16 @@ it("sets skipBootstrap without mutating the existing agent defaults or other con
   expect(config.agents?.defaults).toEqual({ workspace: "/tmp/workspace" });
 });
 
+it("hardens a fresh install: cautious exec approvals and workspace-only file tools", () => {
+  const result = applyLocalSetupWorkspaceConfig({}, "/tmp/workspace");
+
+  expect(result.tools).toEqual({
+    profile: "full",
+    exec: { security: "allowlist", ask: "on-miss" },
+    fs: { workspaceOnly: true },
+  });
+});
+
 it("defaults to full tools and preserves independent policies on rerun", () => {
   const baseConfig: OpenClawConfig = {
     tools: {

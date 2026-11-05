@@ -8,6 +8,11 @@ import type { ToolProfileId } from "../config/types.tools.js";
 import { resolveUserPath } from "../utils.js";
 
 const ONBOARDING_DEFAULT_TOOLS_PROFILE: ToolProfileId = "full";
+// A fresh local install starts with the `cautious` exec preset (allowlisted commands run,
+// anything else asks; the runtime's unanswered-prompt fallback is already deny) and
+// workspace-only file tools. Operators who want host-wide access opt in with
+// `openclaw exec-policy preset yolo` and `tools.fs.workspaceOnly: false`.
+const ONBOARDING_DEFAULT_EXEC_POLICY = { security: "allowlist", ask: "on-miss" } as const;
 
 export type OnboardingWorkspaceConflict = {
   currentWorkspaceDir: string;
@@ -97,6 +102,8 @@ export function applyLocalSetupWorkspaceConfig(
     tools: {
       ...baseConfig.tools,
       profile: baseConfig.tools?.profile ?? ONBOARDING_DEFAULT_TOOLS_PROFILE,
+      exec: baseConfig.tools?.exec ?? { ...ONBOARDING_DEFAULT_EXEC_POLICY },
+      fs: baseConfig.tools?.fs ?? { workspaceOnly: true },
     },
   };
 }
