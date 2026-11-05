@@ -63,6 +63,7 @@ beforeEach(() => {
   setWorkshopRuntime({
     config: { current: () => config },
     agent: { resolveAgentTimeoutMs: () => 600_000 },
+    logging: { getChildLogger: () => ({ debug() {}, info() {}, warn() {} }) },
     system: { captureSessionGeneration: vi.fn(async () => generation) },
     subagent: {
       runForkedTurn: async (params: ForkParams) => {
@@ -191,4 +192,65 @@ it("stops the running review model when learning is turned off", async () => {
   } finally {
     vi.useRealTimers();
   }
+});
+
+const judgedCandidate: ExperienceReviewCandidate = {
+  ...candidate,
+  evidence: { text: "USER: deploy\nTOOL RESULT exec [ERROR]: exit 2", toolCalls: 1, toolErrors: 1 },
+};
+
+it("never forks a review for a turn the outcome judge could not verify", async () => {
+  const judge = vi.fn(async () => ({
+    verdict: "failure" as const,
+    evidence: "make deploy exited 2",
+    userCorrected: false,
+  }));
+  await runSkillExperienceReview(judgedCandidate, { judge });
+  expect(judge).toHaveBeenCalledWith(
+    expect.objectContaining({ agentId: "main", evidence: judgedCandidate.evidence }),
+  );
+  expect(forks).toHaveLength(0);
+  expect(mocks.postWorkshopChangeNotice).not.toHaveBeenCalled();
+});
+
+it("forks a review for a verified turn and hands the verdict to the reviewer", async () => {
+  const judge = vi.fn(async () => ({
+    verdict: "success" as const,
+    evidence: "deploy log shows release 42 live",
+    userCorrected: false,
+  }));
+  await runSkillExperienceReview(judgedCandidate, { judge });
+  expect(forks).toHaveLength(1);
+  expect(forks[0]?.prompt).toContain(
+    "Outcome judge: success. Evidence: deploy log shows release 42 live",
+  );
+});
+
+it("still learns from a failed turn when the user corrected the agent", async () => {
+  const judge = vi.fn(async () => ({
+    verdict: "failure" as const,
+    evidence: "user said the target was wrong",
+    userCorrected: true,
+  }));
+  await runSkillExperienceReview(judgedCandidate, { judge });
+  expect(forks).toHaveLength(1);
+  expect(forks[0]?.prompt).toContain("user corrected the agent");
+  expect(forks[0]?.prompt).toContain("capture the user's correction as the rule");
+});
+
+it("skips the judge when the outcome gate is off", async () => {
+  config = {
+    plugins: {
+      entries: { "skill-workshop": { config: { autonomous: { outcomeGate: false } } } },
+    },
+  };
+  const judge = vi.fn(async () => ({
+    verdict: "failure" as const,
+    evidence: "",
+    userCorrected: false,
+  }));
+  await runSkillExperienceReview(judgedCandidate, { judge });
+  expect(judge).not.toHaveBeenCalled();
+  expect(forks).toHaveLength(1);
+  expect(forks[0]?.prompt).not.toContain("Outcome judge");
 });

@@ -11,6 +11,7 @@ import {
 import { isRecord } from "openclaw/plugin-sdk/string-coerce-runtime";
 import { resolveSkillWorkshopConfig } from "./config.js";
 import type { ReviewedSkillUse } from "./experience-review-prompt.js";
+import { summarizeTurnEvidence, type TurnEvidence } from "./outcome-judge.js";
 import { workshopLog } from "./runtime.js";
 
 /** Model iterations a session accumulates across turns before a review is due. */
@@ -69,6 +70,8 @@ export type ExperienceReviewCandidate = {
   source: ExperienceReviewSource;
   usedSkills?: ExperienceReviewAgentEndEvent["skillsUsed"];
   turnAborted?: boolean;
+  /** Bounded evidence of the reviewed turn for the outcome judge; the fork reads the transcript itself. */
+  evidence?: TurnEvidence;
 };
 
 /** Starts one delayed callback; the returned function cancels it. */
@@ -365,6 +368,7 @@ export function createSkillExperienceReviewScheduler(deps: ExperienceReviewSched
         source: { ...source },
         usedSkills: params.event.skillsUsed ? [...params.event.skillsUsed] : undefined,
         turnAborted: !params.event.success,
+        evidence: summarizeTurnEvidence(params.event.messages),
       };
       const pending = existing ?? { candidate };
       pending.candidate = candidate;

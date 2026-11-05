@@ -6,9 +6,17 @@ import { listWorkshopChanges } from "openclaw/plugin-sdk/skill-workshop-host-run
 import { resolveSkillWorkshopConfig } from "./config.js";
 import { buildSkillExperienceReviewPrompt } from "./experience-review-prompt.js";
 import type { ExperienceReviewCandidate } from "./experience-review-scheduler.js";
+import {
+  isLearnableOutcome,
+  judgeTurnOutcome,
+  readSkillOutcomes,
+  recordSkillOutcomes,
+  type JudgeTurnOutcome,
+  type TurnOutcome,
+} from "./outcome-judge.js";
 import { postWorkshopChangeNotice } from "./review-outcome.js";
 import { workshopReviewRunId } from "./review-undo.js";
-import { getWorkshopRuntime, readWorkshopRuntimeConfig } from "./runtime.js";
+import { getWorkshopRuntime, readWorkshopRuntimeConfig, workshopLog } from "./runtime.js";
 
 const REVIEW_TOOLS = ["skill_workshop"] as const;
 // How often a running review rereads the live learning mode; turning learning off stops it.
@@ -28,7 +36,7 @@ function learningTurnedOff(): Error {
  */
 export async function runSkillExperienceReview(
   candidate: ExperienceReviewCandidate,
-  options: { abortSignal?: AbortSignal } = {},
+  options: { abortSignal?: AbortSignal; judge?: JudgeTurnOutcome } = {},
 ): Promise<void> {
   const { source } = candidate;
   // Learning may have been turned off, or the session made incognito, while the review waited.
@@ -40,6 +48,36 @@ export async function runSkillExperienceReview(
     return;
   }
   const runtime = getWorkshopRuntime();
+  // Outcome gate: the judge runs before the fork is admitted, so an unverified turn costs one
+  // small tool-free call and never a full review. Its verdict is also the skills' feedback loop.
+  let turnOutcome: TurnOutcome | undefined;
+  if (resolveSkillWorkshopConfig(config).autonomous.outcomeGate && candidate.evidence) {
+    turnOutcome = await (options.judge ?? judgeTurnOutcome)({
+      config,
+      agentId: source.agentId,
+      evidence: candidate.evidence,
+      ...(options.abortSignal ? { abortSignal: options.abortSignal } : {}),
+    });
+    await recordSkillOutcomes({
+      config,
+      agentId: source.agentId,
+      skillNames: (candidate.usedSkills ?? []).map((skill) => skill.name),
+      outcome: turnOutcome,
+    });
+    if (!isLearnableOutcome(turnOutcome)) {
+      workshopLog().info(
+        `experience review skipped: reason=unverified-outcome verdict=${turnOutcome.verdict} session=${source.sessionKey} evidence=${JSON.stringify(turnOutcome.evidence)}`,
+      );
+      return;
+    }
+  }
+  // The tallies only annotate the used skills in the prompt; a missing ledger never blocks learning.
+  const skillOutcomes = candidate.usedSkills?.length
+    ? await readSkillOutcomes(config, source.agentId).catch((error: unknown) => {
+        workshopLog().debug(`skill outcome ledger unavailable: ${formatErrorMessage(error)}`);
+        return {};
+      })
+    : {};
   // The notice needs the session's store; the fork reports the generation it admitted.
   const current = await runtime.system.captureSessionGeneration({
     agentId: source.agentId,
@@ -69,6 +107,8 @@ export async function runSkillExperienceReview(
       prompt: buildSkillExperienceReviewPrompt({
         ...candidate,
         propose: resolveSkillWorkshopConfig(config).autonomous.mode === "propose",
+        ...(turnOutcome ? { outcome: turnOutcome } : {}),
+        skillOutcomes,
       }),
       tools: REVIEW_TOOLS,
       runId,

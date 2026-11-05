@@ -1,7 +1,7 @@
 // Skill Workshop's /learn contribution: skill guidance plus the drafts and undo subcommands.
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk/plugin-entry";
 import { listWorkshopDrafts, type WorkshopDraft } from "./drafts.js";
-import { WorkshopWriteError } from "./library.js";
+import { EXISTING_SKILL_NAME_PATTERN, listWorkshopSkills, WorkshopWriteError } from "./library.js";
 import {
   describeWorkshopReviewUndo,
   undoWorkshopReview,
@@ -13,6 +13,7 @@ import {
   SKILL_DO_NOT_CAPTURE_PROMPT,
   SKILL_LEARNING_METHOD_PROMPT,
 } from "./skill-authoring-standards.js";
+import { listLockedSkills, setSkillLock } from "./skill-guard.js";
 
 type LearnContribution = Parameters<OpenClawPluginApi["registerLearnContribution"]>[0];
 
@@ -39,6 +40,42 @@ function buildDraftReviewPrompt(drafts: readonly WorkshopDraft[], focus: string)
   ].join("\n");
 }
 
+/**
+ * "/learn lock <skill>" and "/learn unlock <skill>": a locked skill belongs to the user; no
+ * agent turn or background review may change, archive, or restore it until it is unlocked.
+ */
+function lockSubcommands(): NonNullable<LearnContribution["subcommands"]> {
+  return (["lock", "unlock"] as const).map((name) => ({
+    name,
+    matchArgs: (args: string) => /^\s+\S+\s*$/.test(args),
+    direct: true,
+    handle: async ({ config, agentId, args }) => {
+      const skill = args.trim();
+      if (!EXISTING_SKILL_NAME_PATTERN.test(skill)) {
+        return { text: `⚠️ "${skill}" is not a skill name.` };
+      }
+      const known = (await listWorkshopSkills(config, agentId)).some(
+        (entry) => entry.name === skill,
+      );
+      const locked = await listLockedSkills(config, agentId);
+      if (!known && !locked.includes(skill)) {
+        return { text: `No learned skill named "${skill}".` };
+      }
+      const changed = await setSkillLock({ config, agentId, name: skill, locked: name === "lock" });
+      if (name === "lock") {
+        return {
+          text: changed
+            ? `🔒 Locked "${skill}": the agent will not change it until you run /learn unlock ${skill}.`
+            : `"${skill}" is already locked.`,
+        };
+      }
+      return {
+        text: changed ? `🔓 Unlocked "${skill}".` : `"${skill}" is not locked.`,
+      };
+    },
+  }));
+}
+
 export const workshopLearnContribution: LearnContribution = {
   medium: "skills",
   toolNames: ["skill_workshop"],
@@ -52,6 +89,7 @@ export const workshopLearnContribution: LearnContribution = {
     appendix: [SKILL_AUTHORING_STANDARDS_PROMPT, SKILL_DO_NOT_CAPTURE_PROMPT],
   }),
   subcommands: [
+    ...lockSubcommands(),
     {
       // "/learn drafts [skill] [focus]": a first word naming a drafted skill narrows the review.
       name: "drafts",

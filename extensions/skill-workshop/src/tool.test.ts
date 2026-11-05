@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import path from "node:path";
 import type { OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
 import type { PluginRuntime } from "openclaw/plugin-sdk/runtime-store";
 import { listWorkshopChanges } from "openclaw/plugin-sdk/skill-workshop-host-runtime";
@@ -6,13 +7,15 @@ import { createOpenClawTestState, type OpenClawTestState } from "openclaw/plugin
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as library from "./library.js";
 import { setWorkshopRuntime } from "./runtime.js";
+import * as skillGuard from "./skill-guard.js";
 import * as skillsRoot from "./skills-root.js";
 import { useWorkshopPluginScope } from "./test-support.js";
 import { createSkillWorkshopTool, type SkillWorkshopToolOptions } from "./tool.js";
 
 const { run, scoped } = useWorkshopPluginScope();
 const { listWorkshopArchive } = scoped(library);
-const { resolveWorkshopDraftsDir } = scoped(skillsRoot);
+const { resolveWorkshopDraftsDir, resolveWorkshopSkillsDir } = scoped(skillsRoot);
+const { setSkillLock } = scoped(skillGuard);
 let runtimeConfig: OpenClawConfig = {};
 const recordUsed = vi.fn<PluginRuntime["skills"]["recordUsed"]>(() => true);
 const setRuntimeConfigSnapshot = (config: OpenClawConfig) => {
@@ -187,5 +190,47 @@ describe("skill_workshop", () => {
     expect(result).toContain('Created "staging-deploy"');
     expect(result).toContain("- deploy: Deploy staging");
     expect(result).not.toContain("- staging-deploy:");
+  });
+
+  it("refuses every change to a skill the user locked, from any caller", async () => {
+    await setSkillLock({ config: {}, agentId: "main", name: "deploy", locked: true });
+    const foreground = workshop();
+    await expect(foreground("patch", patch)).rejects.toThrow(/locked by the user/);
+    await expect(foreground("archive", { reason: "stale" })).rejects.toThrow(/locked by the user/);
+    await expect(foreground("restore")).rejects.toThrow(/locked by the user/);
+    expect(await foreground("list")).toContain("- deploy [locked]: Deploy staging");
+
+    const review = workshop({ runId: "review-run", reviewOf: "agent:main:main" });
+    await review("view");
+    await expect(review("patch", { ...patch, reason: "r" })).rejects.toThrow(
+      /do not change it, retry, or recreate it under another name/i,
+    );
+
+    await setSkillLock({ config: {}, agentId: "main", name: "deploy", locked: false });
+    await foreground("patch", patch);
+    expect(await foreground("view")).toContain("make ship");
+  });
+
+  it("keeps background reviews off a skill a human edited since the last learned change", async () => {
+    const skillFile = path.join(resolveWorkshopSkillsDir({}, "main"), "deploy", "SKILL.md");
+    await fs.writeFile(
+      skillFile,
+      "---\nname: deploy\ndescription: Deploy staging\n---\n\n1. Run make deploy with care.\n",
+    );
+    const review = workshop({ runId: "review-run", reviewOf: "agent:main:main" });
+    await review("view");
+    await expect(review("patch", { ...patch, reason: "r" })).rejects.toThrow(
+      /edited by hand since the last learned change/,
+    );
+    expect(
+      await review("draft", {
+        content: "---\nname: deploy\ndescription: Deploy staging\n---\n\nx\n",
+      }),
+    ).toContain("Saved draft");
+    // The user's own agent turn may still edit it; that write becomes the new provenance.
+    await workshop()("patch", { old_text: "with care", new_text: "carefully" });
+    await review("view");
+    await review("patch", { old_text: "carefully", new_text: "now", reason: "r" });
+    expect(await review("view")).toContain("make deploy now");
   });
 });

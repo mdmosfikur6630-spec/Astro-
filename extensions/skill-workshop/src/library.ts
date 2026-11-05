@@ -27,6 +27,7 @@ import {
   type WorkshopChange,
 } from "openclaw/plugin-sdk/skill-workshop-host-runtime";
 import { resolveSkillWorkshopConfig } from "./config.js";
+import { recordWorkshopWrite } from "./skill-guard.js";
 import {
   ignoreMissingPath,
   listVersions,
@@ -252,6 +253,8 @@ export async function mutateSkill(
         // Checked at lock time to skip needless work, and again right before each file effect.
         const applied = await apply({ ...paths, assertLive: () => ctx.assertLive?.() });
         await pruneVersions(paths.versionsDir);
+        // The committed SKILL.md is the Workshop's own work until a human edits it.
+        await recordWorkshopWrite(ctx.config, ctx.agentId, name);
         return applied;
       },
       // The change log is written after discovery refresh, so a failed record never leaves a

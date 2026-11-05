@@ -8,11 +8,19 @@ const workshopPluginConfig = (settings: Record<string, unknown>): OpenClawConfig
 });
 
 describe("resolveSkillWorkshopConfig", () => {
-  it("defaults autonomous learning to auto with channel notices off", () => {
+  it("defaults autonomous learning to auto with channel notices off and the outcome gate on", () => {
     expect(resolveSkillWorkshopConfig().autonomous).toEqual({
       mode: "auto",
       channelNotices: false,
+      outcomeGate: true,
     });
+  });
+
+  it.each([false, true])("reads the outcome gate %s", (outcomeGate) => {
+    expect(
+      resolveSkillWorkshopConfig(workshopPluginConfig({ autonomous: { outcomeGate } })).autonomous
+        .outcomeGate,
+    ).toBe(outcomeGate);
   });
 
   it.each([false, true])("reads channel notices %s", (channelNotices) => {

@@ -8,4 +8,5 @@ export type IsolatedCompletionPurpose =
   | "progress-narration"
   | "transcript-summary"
   | "skill-diet"
+  | "skill-outcome-judge"
   | "plugin-completion";

@@ -27,6 +27,10 @@
       "label": "Skill Workshop Channel Notices",
       "help": "Post background review notices to channel conversations, except Slack, with an Undo button (default: false); the Control UI shows that message as plain text. When disabled, notices appear only as the Learned row in the Control UI chat. Saying \"undo\" works either way."
     },
+    "autonomous.outcomeGate": {
+      "label": "Skill Workshop Outcome Gate",
+      "help": "Before a background review may learn from a turn, a tool-free judge reads bounded evidence from that turn and must see that the task visibly succeeded, or that the user corrected the agent. Failed or unverified work is never saved as a skill, and each learned skill keeps a success/failure tally the reviewer sees. Default: true."
+    },
     "maxSkillBytes": {
       "label": "Maximum Workshop Skill Size",
       "help": "Largest Workshop SKILL.md in bytes, from 1024 to 200000. Default: 40000.",
@@ -50,6 +54,9 @@
             ]
           },
           "channelNotices": {
+            "type": "boolean"
+          },
+          "outcomeGate": {
             "type": "boolean"
           }
         }

@@ -9,6 +9,8 @@ type SkillWorkshopConfig = {
   autonomous: {
     mode: SkillsWorkshopAutonomousMode;
     channelNotices: boolean;
+    /** Judge the turn's outcome before learning from it; unverified work is never captured. */
+    outcomeGate: boolean;
   };
   maxSkillBytes: number;
 };
@@ -29,6 +31,7 @@ export function resolveSkillWorkshopConfig(config?: OpenClawConfig): SkillWorksh
     autonomous: {
       mode: isMode(autonomous?.mode) ? autonomous.mode : "auto",
       channelNotices: autonomous?.channelNotices === true,
+      outcomeGate: autonomous?.outcomeGate !== false,
     },
     maxSkillBytes: Math.min(Math.max(maxSkillBytes, 1024), 200_000),
   };

@@ -31,8 +31,14 @@ import {
   writeWorkshopSkillFile,
   type WorkshopMutationContext,
 } from "./library.js";
+import { describeSkillOutcome, readSkillOutcomes } from "./outcome-judge.js";
 import { getWorkshopRuntime, readWorkshopRuntimeConfig } from "./runtime.js";
 import { SKILL_AUTHORING_STANDARDS_PROMPT } from "./skill-authoring-standards.js";
+import {
+  describeSkillGuardRefusal,
+  listLockedSkills,
+  readSkillGuardStatus,
+} from "./skill-guard.js";
 import { skillWriteAdvisories } from "./skill-lint.js";
 import { resolveWorkshopSkillsDir } from "./skills-root.js";
 import { SkillWorkshopToolSchema } from "./tool-schema.js";
@@ -52,11 +58,14 @@ Actions: list | view name [file_path] [version] | create name content | patch na
 - file_path: SKILL.md or files under references/, templates/, scripts/, assets/. remove_file deletes one of those support files; archive removes a whole skill.
 - reason: one short line saying what changed; shown to the user.
 - restore without version undoes the last change.
+- A skill marked [locked] belongs to the user: never change it or recreate it under another name. A skill marked "failed N of last M uses" has misled the agent; fix the wrong step or archive it.
 - draft: saves a proposed SKILL.md for the user to review later; skills stay unchanged. list shows waiting drafts. When reviewing drafts with the user, save approved changes with create/patch, then discard the drafts the user decided on.
 
 ${SKILL_AUTHORING_STANDARDS_PROMPT}`;
 
 const GUARDED_ACTIONS = new Set(["patch", "write_file", "remove_file", "archive"]);
+// Every action that changes a live skill; a locked or hand-edited skill refuses them.
+const PROTECTED_ACTIONS = new Set([...GUARDED_ACTIONS, "restore"]);
 const MAX_TRACKED_RUNS = 256;
 // Retries and fallbacks rebuild tools within one run; reads must survive that.
 const viewedSkillsByRun = new Map<string, Set<string>>();
@@ -125,12 +134,20 @@ export function createSkillWorkshopTool(options: SkillWorkshopToolOptions): AnyA
     };
     const runMutation = <T>(run: () => Promise<T>) => run();
     if (action === "list") {
-      const [skills, archive] = await Promise.all([
+      const [skills, archive, locked, outcomes] = await Promise.all([
         listWorkshopSkills(options.config, options.agentId),
         listWorkshopArchive(options.config, options.agentId),
+        listLockedSkills(options.config, options.agentId),
+        readSkillOutcomes(options.config, options.agentId),
       ]);
       const archived = archive.filter((entry) => !entry.live);
-      const lines = skills.map((skill) => `- ${skill.name}: ${skill.description}`);
+      const lines = skills.map((skill) => {
+        const marks = [
+          ...(locked.includes(skill.name) ? ["locked"] : []),
+          ...(describeSkillOutcome(outcomes[skill.name]) ?? []),
+        ];
+        return `- ${skill.name}${marks.length > 0 ? ` [${marks.join("; ")}]` : ""}: ${skill.description}`;
+      });
       if (archived.length > 0) {
         lines.push(
           "Archived (restore with action=restore):",
@@ -148,7 +165,7 @@ export function createSkillWorkshopTool(options: SkillWorkshopToolOptions): AnyA
       }
       return textResult(
         lines.length > 0 ? lines.join("\n") : "No learned skills yet. Add one with action=create.",
-        { skills, archived, drafts },
+        { skills, archived, drafts, locked },
       );
     }
 
@@ -234,6 +251,17 @@ export function createSkillWorkshopTool(options: SkillWorkshopToolOptions): AnyA
       throw new ToolInputError(
         `View it first: call skill_workshop action=view name=${name}, then retry once.`,
       );
+    }
+
+    if (PROTECTED_ACTIONS.has(action)) {
+      const refusal = describeSkillGuardRefusal({
+        name,
+        status: await readSkillGuardStatus(options.config, options.agentId, name),
+        review: Boolean(options.reviewOf),
+      });
+      if (refusal) {
+        throw new ToolInputError(refusal);
+      }
     }
 
     // SKILL.md writes get advisory feedback, so the prior text is read before the write.
