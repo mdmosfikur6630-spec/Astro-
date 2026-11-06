@@ -168,9 +168,16 @@ function createPluginToolDelivery(params: {
     sessionId,
   };
   const messageActionAuthorization = resolveMessageActionTurnAuthorization(turnIdentity);
-  if (messageActionAuthorization?.scheduled || messageActionAuthorization?.deliveryAttempt) {
+  if (
+    !messageActionAuthorization ||
+    messageActionAuthorization.scheduled ||
+    messageActionAuthorization.deliveryAttempt
+  ) {
     // Cron capabilities are consumed by individual message actions. They do not
-    // delegate the source conversation's plugin delivery capability.
+    // delegate the source conversation's plugin delivery capability. A token that does
+    // not resolve for this turn (a scheduled run bound under another session identity)
+    // likewise grants nothing: binding a dead capability here made every cron turn with
+    // a plugin tool fail with "plugin delivery capability is no longer active".
     return undefined;
   }
   const channelPlugin = activeRegistry.channels.find(
