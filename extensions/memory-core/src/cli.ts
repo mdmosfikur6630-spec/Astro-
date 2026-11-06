@@ -200,6 +200,17 @@ export function registerMemoryCli(program: Command, hostOptions?: MemoryCoreRunt
       await runMemorySearchWithOwner(query, opts, hostOptions);
     });
 
+  agentCommand(
+    "trust",
+    "Re-admit a quarantined MEMORY.md or USER.md to automatic context after reviewing it",
+  )
+    .argument("<file>", "MEMORY.md, USER.md, users/<id>/USER.md, or memory/<date>.md")
+    .option("--json", "Print JSON")
+    .action(async (file: string, opts: { agent?: string; json?: boolean }) => {
+      const { runMemoryTrust } = await import("./cli-trust.runtime.js");
+      await runMemoryTrust(file, opts);
+    });
+
   agentCommand("forget", "Delete memories and derived artifacts from selected sessions")
     .option(
       "--session <id-or-key>",

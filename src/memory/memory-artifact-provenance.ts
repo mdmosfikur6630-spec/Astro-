@@ -193,6 +193,47 @@ export async function recordMemoryArtifactWriteProvenance(params: {
   };
 }
 
+/**
+ * Operator re-trust: records the file's current content as `agent` origin so automatic context
+ * includes it again. A quarantined MEMORY.md or USER.md otherwise stays excluded forever, which
+ * users experience as the agent "forgetting everything". The operator vouches for the content
+ * they reviewed; the hash binds the vouch to exactly that content.
+ */
+export async function trustMemoryArtifact(params: {
+  workspaceDir: string;
+  relativePath: string;
+  content: string;
+  observedAt: number;
+}): Promise<{ previous: MemoryArtifactOriginClass | "none"; fileHash: string }> {
+  const address = resolveAddress(params);
+  if (!address) {
+    throw new Error(`${params.relativePath} is not a tracked memory artifact path.`);
+  }
+  const store = openStore();
+  const fileHash = sha256Hex(params.content);
+  let observation = await store.observe(address.storeKey);
+  for (;;) {
+    const previous = normalizeStoredProvenance(observation.value, address);
+    const result = await store.compareAndApply(address.storeKey, observation.comparison, {
+      operation: "update",
+      action: "set",
+      value: {
+        version: 1,
+        workspaceKey: address.workspaceKey,
+        relativePath: address.relativePath,
+        fileHash,
+        originClass: "agent",
+        observedAt: params.observedAt,
+        reservationId: randomUUID(),
+      },
+    });
+    if (result.status !== "conflict") {
+      return { previous: previous?.originClass ?? "none", fileHash };
+    }
+    observation = result.current;
+  }
+}
+
 export async function clearMemoryArtifactProvenance(params: {
   workspaceDir: string;
   relativePath: string;

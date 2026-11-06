@@ -40,6 +40,7 @@ export {
   listMemoryArtifactProvenance,
   normalizeMemoryArtifactRelativePath,
   readMemoryArtifactProvenance,
+  trustMemoryArtifact,
 } from "../memory/memory-artifact-provenance.js";
 export type {
   MemoryArtifactOriginClass,
