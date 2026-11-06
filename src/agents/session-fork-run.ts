@@ -39,6 +39,7 @@ import {
   prepareAgentRunAdmission,
 } from "./admitted-run-context.js";
 import { resolveAgentDir } from "./agent-scope-config.js";
+import { resolveContextTokensForModelFromCache } from "./context-resolution.js";
 import type { EmbeddedAgentRunResult } from "./embedded-agent-runner/types.js";
 import { emitInternalRunUsageDiagnostic } from "./internal-run-usage.js";
 import {
@@ -54,6 +55,32 @@ import { SessionManager } from "./sessions/session-manager.js";
  * transcript, yields to foreground work, and stops when the source session is reset, replaced
  * or rewritten. Tools see the source through `inputProvenance` (`sourceTool: "session_fork"`).
  */
+// Background forks read the finished turn whole: a fixed 16k budget silently dropped every
+// multi-step turn on large-window models, so the learning review never saw them. Scale with the
+// model's window, floored at the old cap and ceilinged so background work stays cheap.
+const FORK_CONTEXT_TOKEN_FLOOR = 16_384;
+const FORK_CONTEXT_TOKEN_CEILING = 131_072;
+const FORK_CONTEXT_WINDOW_SHARE = 0.5;
+
+function resolveForkContextTokenBudget(
+  config: OpenClawConfig,
+  model: { provider: string; model: string },
+): number {
+  const contextTokens = resolveContextTokensForModelFromCache({
+    cfg: config,
+    provider: model.provider,
+    model: model.model,
+    allowUnscopedModelLookup: false,
+  });
+  if (!contextTokens || !Number.isFinite(contextTokens)) {
+    return FORK_CONTEXT_TOKEN_FLOOR;
+  }
+  return Math.min(
+    FORK_CONTEXT_TOKEN_CEILING,
+    Math.max(FORK_CONTEXT_TOKEN_FLOOR, Math.floor(contextTokens * FORK_CONTEXT_WINDOW_SHARE)),
+  );
+}
+
 type SessionForkRunParams = {
   config: OpenClawConfig;
   /** The completed transcript entry the fork reads through. */
@@ -502,7 +529,7 @@ async function runSessionForkInner(params: SessionForkRunParams, abortSignal: Ab
       promptMode: "minimal",
       bootstrapContextMode: "lightweight",
       forceMessageTool: false,
-      contextTokenBudget: 16_384,
+      contextTokenBudget: resolveForkContextTokenBudget(config, params.model),
       streamParams: { maxTokens: 2_048 },
       thinkLevel: "low",
       timeoutMs: Math.min(params.timeoutMs, 120_000),
