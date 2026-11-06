@@ -38,6 +38,7 @@ export type {
 } from "../plugins/memory-state.js";
 export {
   listMemoryArtifactProvenance,
+  normalizeMemoryArtifactRelativePath,
   readMemoryArtifactProvenance,
 } from "../memory/memory-artifact-provenance.js";
 export type {

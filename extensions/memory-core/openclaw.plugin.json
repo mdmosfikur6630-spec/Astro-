@@ -2,19 +2,46 @@
   "controlUi": {
     "entry": "dist/control-ui/overview/index.js",
     "activation": "settings-only",
-    "settingsViews": [{"section": "memory", "panel": "overview"}, {"section": "memory", "panel": "memories"}]
+    "settingsViews": [
+      {
+        "section": "memory",
+        "panel": "overview"
+      },
+      {
+        "section": "memory",
+        "panel": "memories"
+      }
+    ]
   },
   "id": "memory-core",
   "generationOverlap": true,
-  "categories": ["memory"],
+  "categories": [
+    "memory"
+  ],
   "doctorContract": {
     "stateMigrations": [
-      { "id": "memory-core-host-events-jsonl-to-sqlite", "doctorOnly": true },
-      { "id": "memory-core-dreams-json-to-sqlite" },
-      { "id": "memory-core-dreaming-cron", "doctorOnly": true, "phase": "after-session-repair" },
-      { "id": "memory-core-legacy-sidecar-index-to-agent-sqlite" },
-      { "id": "memory-core-qmd-workspace-retired", "doctorOnly": true },
-      { "id": "memory-core-qmd-file-locks-to-sqlite-leases" }
+      {
+        "id": "memory-core-host-events-jsonl-to-sqlite",
+        "doctorOnly": true
+      },
+      {
+        "id": "memory-core-dreams-json-to-sqlite"
+      },
+      {
+        "id": "memory-core-dreaming-cron",
+        "doctorOnly": true,
+        "phase": "after-session-repair"
+      },
+      {
+        "id": "memory-core-legacy-sidecar-index-to-agent-sqlite"
+      },
+      {
+        "id": "memory-core-qmd-workspace-retired",
+        "doctorOnly": true
+      },
+      {
+        "id": "memory-core-qmd-file-locks-to-sqlite-leases"
+      }
     ]
   },
   "name": "OpenClaw Memory",
@@ -30,11 +57,18 @@
   },
   "kind": "memory",
   "contracts": {
-    "tools": ["intent", "memory_get", "memory_search"]
+    "tools": [
+      "intent",
+      "memory_get",
+      "memory_search"
+    ]
   },
   "toolMetadata": {
     "intent": {
-      "profiles": ["coding", "messaging"]
+      "profiles": [
+        "coding",
+        "messaging"
+      ]
     },
     "memory_get": {
       "replaySafe": true
@@ -65,6 +99,10 @@
     "dreaming.phases.deep.maxPriorEntryLossFraction": {
       "label": "Maximum Prior Entry Loss",
       "help": "Maximum fraction of prior MEMORY.md entries an accepted consolidation rewrite may remove."
+    },
+    "writeApproval": {
+      "label": "Memory Write Approval",
+      "help": "Ask before the agent changes MEMORY.md, USER.md, or memory/*.md with its file tools, using the same approval prompt as command approvals. Denied or unanswered requests leave memory unchanged. Default: false."
     }
   },
   "configGroups": [
@@ -72,13 +110,17 @@
       "id": "memory-policy",
       "title": "Memory policy",
       "order": 10,
-      "properties": ["memoryPolicy"]
+      "properties": [
+        "memoryPolicy"
+      ]
     },
     {
       "id": "dreaming",
       "title": "Dreaming",
       "order": 20,
-      "properties": ["dreaming"]
+      "properties": [
+        "dreaming"
+      ]
     }
   ],
   "configSchema": {
@@ -95,15 +137,26 @@
             "properties": {
               "hookExternalContentSources": {
                 "type": "array",
-                "items": { "type": "string" }
+                "items": {
+                  "type": "string"
+                }
               },
               "channels": {
                 "type": "array",
-                "items": { "type": "string" }
+                "items": {
+                  "type": "string"
+                }
               },
               "chatTypes": {
                 "type": "array",
-                "items": { "type": "string", "enum": ["direct", "group", "channel"] }
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "direct",
+                    "group",
+                    "channel"
+                  ]
+                }
               }
             }
           }
@@ -135,7 +188,11 @@
             "properties": {
               "mode": {
                 "type": "string",
-                "enum": ["inline", "separate", "both"]
+                "enum": [
+                  "inline",
+                  "separate",
+                  "both"
+                ]
               },
               "separateReports": {
                 "type": "boolean"
@@ -283,6 +340,9 @@
             }
           }
         }
+      },
+      "writeApproval": {
+        "type": "boolean"
       }
     }
   }

@@ -64,9 +64,13 @@ export async function runSkillExperienceReview(
       skillNames: (candidate.usedSkills ?? []).map((skill) => skill.name),
       outcome: turnOutcome,
     });
+    // The verdict is the visible outcome of the gate, whichever way it went.
+    workshopLog().info(
+      `outcome judge: verdict=${turnOutcome.verdict} userCorrected=${turnOutcome.userCorrected} session=${source.sessionKey} evidence=${JSON.stringify(turnOutcome.evidence)}`,
+    );
     if (!isLearnableOutcome(turnOutcome)) {
       workshopLog().info(
-        `experience review skipped: reason=unverified-outcome verdict=${turnOutcome.verdict} session=${source.sessionKey} evidence=${JSON.stringify(turnOutcome.evidence)}`,
+        `experience review skipped: reason=unverified-outcome session=${source.sessionKey}`,
       );
       return;
     }

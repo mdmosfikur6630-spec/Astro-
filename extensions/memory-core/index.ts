@@ -374,6 +374,17 @@ export default definePluginEntry({
       { names: ["intent"], workspaceAccess: "execute" },
     );
 
+    // Memory write approval (off by default): curated memory files change only with consent.
+    api.on("before_tool_call", async (event, ctx) => {
+      const { resolveMemoryWriteApprovalEnabled } = await import("./src/write-approval.js");
+      const config = (api.runtime.config?.current?.() ?? api.config) as OpenClawConfig;
+      if (!resolveMemoryWriteApprovalEnabled(config)) {
+        return undefined;
+      }
+      const { resolveMemoryWriteApproval } = await import("./src/write-approval.js");
+      return resolveMemoryWriteApproval({ config, agentId: ctx.agentId, event });
+    });
+
     api.on("before_prompt_build", async (event, ctx) => {
       if (ctx.trigger !== "user") {
         return undefined;
